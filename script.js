@@ -12,6 +12,33 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+
+async function generateOrderIDFromFirestore() {
+    const counterRef = db.collection("counters").doc("orderCounter");
+    const year = new Date().getFullYear().toString().slice(-2);
+    let newOrderNumber;
+
+    await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(counterRef);
+        const data = doc.exists ? doc.data() : {};
+        const lastOrderNumber = data.lastOrderNumber || 0;
+        const lastYear = data.year || year;
+
+        newOrderNumber = (lastYear === year) ? lastOrderNumber + 1 : 1;
+
+        transaction.set(counterRef, {
+            lastOrderNumber: newOrderNumber,
+            year: year
+        });
+    });
+
+    const padded = String(newOrderNumber).padStart(5, '0');
+    return `NC-${padded}-${year}`;
+}
+
+
+
+
 async function saveOrderToFirebase(order) {
   try {
     const orderedData = {
@@ -137,7 +164,7 @@ await db.collection('orders').doc(orderedData['Order ID']).set(orderedData);
                 input = document.createElement('input');
                 input.type = 'text';
                 input.name = field;
-                input.value = generateOrderID();
+                input.value = 'Will be generated on submit';
                 input.readOnly = true;
             } else if (field === 'Order Date') {
                 input = document.createElement('input');
@@ -241,7 +268,12 @@ if (deliveryInput) {
         } else {
             const submitBtn = document.createElement('button');
             submitBtn.textContent = 'Submit';
-            submitBtn.onclick = function () {
+            submitBtn.onclick = async function () {
+    saveStepData();
+    const orderID = await generateOrderIDFromFirestore();
+    formData['Order ID'] = orderID;
+    const orderIDInput = document.querySelector('input[name="Order ID"]');
+    if (orderIDInput) orderIDInput.value = orderID;
                 saveStepData();
                 formData['Order Date'] = formatDate(new Date());
                 if (formData['Delivery Date']) {
